@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+	<declare-styleable name="SwipeListView">
+	    <attr name="swipeMode" format="enum">
+			<enum name="none" value="0" />
+			<enum name="left" value="1" />
+			<enum name="right" value="2" />
+			<enum name="both" value="3" />
+		</attr>
+		<attr name="swipeActionLeft" format="enum">
+			<enum name="none" value = "0"/>
+			<enum name="reveal" value="1" />
+			<enum name="dismiss" value="2" />
+		</attr>
+		<attr name="swipeActionRight" format="enum">
+			<enum name="none" value = "0"/>
+			<enum name="reveal" value="1" />
+			<enum name="dismiss" value="2" />
+		</attr>
+		<attr name="swipeOpenOnLongPress" format="boolean" />
+		<attr name="swipeAnimationTime" format="integer" />
+		<attr name="swipeLeftRemainOffset" format="dimension" />
+		<attr name="swipeRightRemainOffset" format="dimension" />
+		<attr name="swipeCloseAllItemsWhenMove" format="boolean" />
+		<attr name="swipeFrontView" format="reference" />
+		<attr name="swipeBackView" format="reference" />
+	</declare-styleable>
+
+</resources>
