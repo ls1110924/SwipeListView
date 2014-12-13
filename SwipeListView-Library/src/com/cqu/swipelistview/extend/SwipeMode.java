@@ -38,22 +38,4 @@ public enum SwipeMode {
 		return mType;
 	}
 	
-	/**
-	 *	将指定索引值转换为对应的枚举值
-	 * @param mIndex
-	 * @return
-	 */
-	public static SwipeMode ofSwipeMode( int mIndex ){
-		SwipeMode mResult = NONE;
-		
-		for( SwipeMode mode : values() ){
-			if( mode.getType() == mIndex ){
-				mResult = mode;
-				break;
-			}
-		}
-		
-		return mResult;
-	}
-	
 }
