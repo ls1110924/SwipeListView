@@ -27,4 +27,22 @@ public enum SwipeAction {
 		return mType;
 	}
 	
+	/**
+	 *	将指定索引值转换为对应的枚举值
+	 * @param mIndex
+	 * @return
+	 */
+	public static SwipeAction ofSwipeAction( int mIndex ){
+		SwipeAction mResult = NONE;
+		
+		for( SwipeAction action : values() ){
+			if( action.getType() == mIndex ){
+				mResult = action;
+				break;
+			}
+		}
+		
+		return mResult;
+	}
+	
 }
