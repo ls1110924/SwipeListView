@@ -17,6 +17,8 @@ import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.view.ViewConfiguration;
 import android.widget.AbsListView;
 import android.widget.AbsListView.OnScrollListener;
@@ -29,7 +31,7 @@ import android.widget.ListView;
  * @author A Shuai
  *
  */
-public class SwipeListView extends ListView implements OnScrollListener{
+public class SwipeListView extends ListView implements OnScrollListener, OnClickListener, OnLongClickListener{
 
 	/**
 	 *	分别表征滑动事件模式，向左滑动操作，向右滑动操作和ListView的滚动状态
@@ -94,7 +96,8 @@ public class SwipeListView extends ListView implements OnScrollListener{
 	//触发动作事件时所处的X，Y坐标
 	private float mActionX, mActionY;
 	
-	
+	//标记触发事件的item view位置索引
+	private int mDownPosition;
 	
 	//ListView的宽度
 	private int mListWidth;
@@ -205,14 +208,24 @@ public class SwipeListView extends ListView implements OnScrollListener{
 				mActionX = mActionY = 0;
 				mScrollState = ScrollState.NONE;
 				mActivePointerId = MotionEventCompat.getPointerId(ev, 0);
+				
+				mCurrentAction = SwipeAction.NONE;
+				
+				mDownPosition = pointToPosition((int)mStartX, (int)mStartY);
+				
+				mVelocityTracker.clear();
+				mVelocityTracker.addMovement(ev);
 				break;
 			}
 			case MotionEvent.ACTION_MOVE:{
+				if( mDownPosition == INVALID_POSITION ){
+					break;
+				}
 				final int pointerIndex = ev.findPointerIndex(mActivePointerId);
 				final float x = MotionEventCompat.getX(ev, pointerIndex);
 				final float y = MotionEventCompat.getY(ev, pointerIndex);
 				
-				if( checkTriggeActionEvent(x, y, mPagingTouchSlop) ){
+				if( checkTriggeActionEvent(x, y, mPagingTouchSlop, ev) ){
 					requestDisallowInterceptTouchEvent(true);
 					return true;
 				}
@@ -230,6 +243,7 @@ public class SwipeListView extends ListView implements OnScrollListener{
 			case MotionEvent.ACTION_CANCEL:{
 				mStartX = mStartY = mActionX = mActionY = 0;
 				mScrollState = ScrollState.NONE;
+				mVelocityTracker.clear();
 				break;
 			}
 		}
@@ -243,15 +257,51 @@ public class SwipeListView extends ListView implements OnScrollListener{
 			return super.onTouchEvent(ev);
 		}
 		
+		if( mScrollState == ScrollState.SCROLLING_Y ){
+			return super.onTouchEvent(ev);
+		}
+		
 		switch( MotionEventCompat.getActionMasked(ev) ){
 			case MotionEvent.ACTION_DOWN:{
 				//既然子视图不处理Down事件，就阻止事件向子视图传递
 				requestDisallowInterceptTouchEvent(true);
+				mCurrentAction = SwipeAction.NONE;
+				final int mDownX = (int) ev.getX();
+				final int mDownY = (int) ev.getY();
+				mDownPosition = pointToPosition(mDownX, mDownY);
+				if( mDownPosition != INVALID_POSITION && mAdapter.isEnabled(mDownPosition) && mAdapter.getItemViewType(mDownPosition) >= 0 ){
+					setViews( getChildAt(mDownPosition) );
+					
+					if( mSwipeOpenOnLongPress ){
+						mFrontView.setLongClickable( mItemState.get(mDownPosition) == OpenState.NORMAL );
+					}
+					
+					mVelocityTracker.clear();
+					mVelocityTracker.addMovement(ev);
+				}
+				
+				super.onTouchEvent(ev);
+				//务必保证返回true
+				return true;
+			}
+			case MotionEvent.ACTION_MOVE:{
+				mVelocityTracker.addMovement(ev);
+				mVelocityTracker.computeCurrentVelocity(1000);
 				break;
 			}
-			case MotionEvent.ACTION_POINTER_UP:
-			case MotionEvent.ACTION_UP:
-			case MotionEvent.ACTION_CANCEL:{
+			case MotionEvent.ACTION_POINTER_UP:{
+				final int pointerIndex = MotionEventCompat.getActionIndex(ev);
+				final int pointerId = MotionEventCompat.getPointerId(ev, pointerIndex);
+
+				if(pointerId != mActivePointerId){
+					break;
+				}
+			}
+			case MotionEvent.ACTION_CANCEL:
+			case MotionEvent.ACTION_UP:{
+				mVelocityTracker.addMovement(ev);
+				mVelocityTracker.computeCurrentVelocity(1000);
+				
 				mScrollState = ScrollState.NONE;
 				break;
 			}
@@ -296,6 +346,16 @@ public class SwipeListView extends ListView implements OnScrollListener{
 	@Override
 	public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {  }
 	
+	@Override
+	public boolean onLongClick(View v) {
+		return false;
+	}
+
+	@Override
+	public void onClick(View v) {
+		
+	}
+	
 	/**
 	 *	设置滑动动画持续时长
 	 * @param mSwipeAnimationTime	应当大于100毫秒
@@ -306,6 +366,23 @@ public class SwipeListView extends ListView implements OnScrollListener{
 		} else {
 			this.mSwipeAnimationTime = mConfigAnimationTime;
 		}
+	}
+	
+	/**
+	 *	
+	 * @param mView
+	 */
+	private void setViews( View mView ){
+		mParentView = mView;
+		mFrontView = mParentView.findViewById( mFrontViewResID );
+		if( mSwipeOpenOnLongPress ){
+			mFrontView.setOnLongClickListener(this);
+		}
+		mBackView = mParentView.findViewById( mBackViewResID );
+	}
+	
+	private void resetViews(){
+		
 	}
 	
 	/**
@@ -334,11 +411,17 @@ public class SwipeListView extends ListView implements OnScrollListener{
 	 * @param y
 	 * @param threshold
 	 */
-	private boolean checkTriggeActionEvent( float x, float y, int threshold ){
+	private boolean checkTriggeActionEvent( float x, float y, int threshold, MotionEvent ev ){
 		if( Math.abs( x - mStartX ) >= threshold ){
 			mScrollState = ScrollState.SCROLLING_X;
 			mActionX = x;
 			mActionY = y;
+			
+			MotionEvent mEvent = MotionEvent.obtain(ev);
+			mEvent.setAction(MotionEvent.ACTION_CANCEL |
+					(MotionEventCompat.getActionIndex(ev) << MotionEventCompat.ACTION_POINTER_INDEX_SHIFT));
+			super.onTouchEvent(mEvent);
+			mEvent.recycle();
 			return true;
 		}
 		return false;
