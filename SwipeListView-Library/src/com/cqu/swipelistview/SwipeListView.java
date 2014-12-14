@@ -1,11 +1,15 @@
 package com.cqu.swipelistview;
 
+import static com.nineoldandroids.view.ViewHelper.setAlpha;
+import static com.nineoldandroids.view.ViewHelper.setTranslationX;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import com.cqu.swipelistview.extend.ScrollState;
 import com.cqu.swipelistview.extend.SwipeAction;
 import com.cqu.swipelistview.extend.SwipeMode;
+import com.nineoldandroids.view.ViewHelper;
 
 import android.content.Context;
 import android.content.res.TypedArray;
@@ -54,6 +58,9 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	//向左滑动最后剩余的偏移量，向右滑动后的剩余偏移量
 	private float mLeftSwipeRemainOffset = 0;
 	private float mRightSwipeRemainOffset = 0;
+	//能进行滑动的最大偏移量
+	private float mLeftOffset;
+	private float mRightOffset;
 	
 	//子视图中上层视图的根视图资源ID，下层视图的根视图的资源ID
 	private int mFrontViewResID = 0;
@@ -88,7 +95,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	/**
 	 *	管理所有的item的状态，表征
 	 */
-	private List<OpenState> mItemState = null;
+	private ArrayList<OpenState> mItemState = null;
 	
 	//Down事件触发时的初始X，Y坐标，以及触摸事件的ID，以判断是否为同一个系列的触摸事件，解决多点触摸时的混乱
 	private float mStartX, mStartY;
@@ -182,6 +189,8 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	protected void onSizeChanged(int w, int h, int oldw, int oldh) {
 		super.onSizeChanged(w, h, oldw, oldh);
 		mListWidth = w;
+		mLeftOffset = mListWidth - mLeftSwipeRemainOffset;
+		mRightOffset = mListWidth - mRightSwipeRemainOffset;
 	}
 
 	@Override
@@ -212,9 +221,16 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				mCurrentAction = SwipeAction.NONE;
 				
 				mDownPosition = pointToPosition((int)mStartX, (int)mStartY);
-				
-				mVelocityTracker.clear();
-				mVelocityTracker.addMovement(ev);
+				if( mDownPosition != INVALID_POSITION && mAdapter.isEnabled(mDownPosition) && mAdapter.getItemViewType(mDownPosition) >= 0 ){
+					setViews( getChildAt(mDownPosition) );
+					
+					if( mSwipeOpenOnLongPress ){
+						mFrontView.setLongClickable( mItemState.get(mDownPosition) == OpenState.NORMAL );
+					}
+					
+					mVelocityTracker.clear();
+					mVelocityTracker.addMovement(ev);
+				}
 				break;
 			}
 			case MotionEvent.ACTION_MOVE:{
@@ -244,6 +260,8 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				mStartX = mStartY = mActionX = mActionY = 0;
 				mScrollState = ScrollState.NONE;
 				mVelocityTracker.clear();
+				
+				resetViews();
 				break;
 			}
 		}
@@ -270,7 +288,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				final int mDownY = (int) ev.getY();
 				mDownPosition = pointToPosition(mDownX, mDownY);
 				if( mDownPosition != INVALID_POSITION && mAdapter.isEnabled(mDownPosition) && mAdapter.getItemViewType(mDownPosition) >= 0 ){
-					setViews( getChildAt(mDownPosition) );
+					setViews( getChildAt(mDownPosition - getFirstVisiblePosition()) );
 					
 					if( mSwipeOpenOnLongPress ){
 						mFrontView.setLongClickable( mItemState.get(mDownPosition) == OpenState.NORMAL );
@@ -285,8 +303,66 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				return true;
 			}
 			case MotionEvent.ACTION_MOVE:{
+				if( mDownPosition == INVALID_POSITION ){
+					break;
+				}
 				mVelocityTracker.addMovement(ev);
 				mVelocityTracker.computeCurrentVelocity(1000);
+				float mVelocityX = Math.abs(mVelocityTracker.getXVelocity());
+				float mVelocityY = Math.abs(mVelocityTracker.getYVelocity());
+				
+				float mDeltaX = ev.getX() - mStartX;
+				
+				if( mCurrentAction == SwipeAction.NONE ){
+					switch( mItemState.get(mDownPosition) ){
+						case NORMAL:
+							if( mSwipeMode == SwipeMode.LEFT && mDeltaX > 0 ){
+								mDeltaX = 0;
+								mStartX = ev.getX();
+								mStartY = ev.getY();
+							}
+							if( mSwipeMode == SwipeMode.RIGHT && mDeltaX < 0 ){
+								mDeltaX = 0;
+								mStartX = ev.getX();
+								mStartY = ev.getY();
+							}
+							break;
+						case LEFT:
+							if( mDeltaX < 0 ){
+								mDeltaX = 0;
+								mStartX = ev.getX();
+								mStartY = ev.getY();
+							}
+							break;
+						case RIGHT:
+							if( mDeltaX > 0 ){
+								mDeltaX = 0;
+								mStartX = ev.getX();
+								mStartY = ev.getY();
+							}
+							break;
+					}
+					
+					if( mVelocityX > mVelocityY && mDeltaX != 0 && checkTriggeActionEvent(ev.getX(), ev.getY(), mTouchSlop, ev) ){
+						switch( mItemState.get(mDownPosition) ){
+							case NORMAL:
+								mCurrentAction = mDeltaX > 0 ? mRightSwipeAction : mLeftSwipeAction;
+								break;
+							default:
+								mCurrentAction = SwipeAction.REVEAL;
+								break;
+						}
+						return true;
+					}
+				}
+				
+				if( mCurrentAction == SwipeAction.NONE ){
+					break;
+				}
+				final float mXOffset = ev.getX() - mActionX;
+				
+				moveToOffset(mXOffset);
+				
 				break;
 			}
 			case MotionEvent.ACTION_POINTER_UP:{
@@ -299,6 +375,10 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 			}
 			case MotionEvent.ACTION_CANCEL:
 			case MotionEvent.ACTION_UP:{
+				if( mDownPosition == INVALID_POSITION ){
+					break;
+				}
+				
 				mVelocityTracker.addMovement(ev);
 				mVelocityTracker.computeCurrentVelocity(1000);
 				
@@ -425,6 +505,55 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 			return true;
 		}
 		return false;
+	}
+	
+	/**
+	 *	移动指定偏移量
+	 * @param mDeltaX
+	 */
+	private void moveToOffset( float mDeltaX ){
+		
+		float mLastTranslateX;
+		switch( mCurrentAction ){
+			case DISMISS:
+				mLastTranslateX = ViewHelper.getTranslationX(mParentView);
+				if( mLastTranslateX < 0 && mDeltaX > 0 ){
+					ViewHelper.setTranslationX(mParentView, 0);
+					ViewHelper.setAlpha(mParentView, 1);
+					mCurrentAction = mRightSwipeAction;
+				} else if ( mLastTranslateX > 0 && mDeltaX < 0 ){
+					ViewHelper.setTranslationX(mParentView, 0);
+					ViewHelper.setAlpha(mParentView, 1);
+					mCurrentAction = mLeftSwipeAction;
+				}
+				break;
+			case REVEAL:
+				mLastTranslateX = ViewHelper.getTranslationX(mFrontView);
+				if( mLastTranslateX < 0 && mDeltaX > 0 ){
+					ViewHelper.setTranslationX(mFrontView, 0);
+					mCurrentAction = mRightSwipeAction;
+				} else if ( mLastTranslateX > 0 && mDeltaX < 0 ){
+					ViewHelper.setTranslationX(mFrontView, 0);
+					mCurrentAction = mLeftSwipeAction;
+				}
+				break;
+			/* 不会出现这种情况 */
+			default:
+				return;
+		}
+		
+		switch( mCurrentAction ){
+			case DISMISS:
+				ViewHelper.setTranslationX(mParentView, mDeltaX);
+				ViewHelper.setAlpha(mParentView, Math.max(0f, Math.min(1f, 1f - 2f * Math.abs(mDeltaX) / mListWidth)));
+				break;
+			case REVEAL:
+				ViewHelper.setTranslationX(mFrontView, mDeltaX);
+				break;
+			default:
+				return;
+		}
+		
 	}
 	
 	private class AdapterDataSetObserver extends DataSetObserver{
