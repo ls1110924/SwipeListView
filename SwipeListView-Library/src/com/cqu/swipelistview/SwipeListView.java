@@ -6,7 +6,10 @@ import java.util.List;
 import com.cqu.swipelistview.extend.ScrollState;
 import com.cqu.swipelistview.extend.SwipeAction;
 import com.cqu.swipelistview.extend.SwipeMode;
+import com.nineoldandroids.animation.Animator;
+import com.nineoldandroids.animation.AnimatorListenerAdapter;
 import com.nineoldandroids.view.ViewHelper;
+import com.nineoldandroids.view.ViewPropertyAnimator;
 
 import android.content.Context;
 import android.content.res.TypedArray;
@@ -48,7 +51,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	private boolean mSwipeOpenOnLongPress = false;
 	private boolean mCloseAllItemsWhenMove = true;
 	
-	//滑动动画事件
+	//滑动动画时长
 	private int mSwipeAnimationTime;
 	
 	//向左滑动最后剩余的偏移量，向右滑动后的剩余偏移量
@@ -261,7 +264,6 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				mScrollState = ScrollState.NONE;
 				mVelocityTracker.clear();
 				
-				resetViews();
 				break;
 			}
 		}
@@ -418,6 +420,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 						break;
 				}
 				
+				//mSwap为true时，表示要打开到某一个方向，即要么触发向左滑动事件，要么触发向右滑动事件
 				boolean mSwap = false;
 				boolean mToRight = false;
 				if( mVelocityXAbs >= mMinFlingVelocity && mVelocityXAbs <= mMaxFlingVelocity && mVelocityXAbs > 2*mVelocityYAbs ){
@@ -427,10 +430,10 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 							mSwap = true;
 							break;
 						case LEFT:
-							mSwap = false;
+							mSwap = mVelocityX < 0;
 							break;
 						case RIGHT:
-							mSwap = false;
+							mSwap = mVelocityX > 0;
 							break;
 					}
 				} else if ( Math.abs( mXOffset ) >= mListWidth / 2 ){
@@ -440,8 +443,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 				
 				generateAnimation(mSwap, mToRight, mDownPosition);
 				
-				mVelocityTracker.recycle();
-				mDownPosition = INVALID_POSITION;
+				mVelocityTracker.clear();
 				isSwing = false;
 				
 				mScrollState = ScrollState.NONE;
@@ -519,6 +521,9 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	 * @param mView
 	 */
 	private void setViews( View mView ){
+		if( mView == null ){
+			return;
+		}
 		mParentView = mView;
 		mFrontView = mParentView.findViewById( mFrontViewResID );
 		if( mSwipeOpenOnLongPress ){
@@ -528,7 +533,12 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	}
 	
 	private void resetViews(){
-		
+		if( mDownPosition != INVALID_POSITION ){
+			mParentView = null;
+			mFrontView = null;
+			mBackView = null;
+			mDownPosition = INVALID_POSITION;
+		}
 	}
 	
 	/**
@@ -629,6 +639,83 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	 * @param mPosition
 	 */
 	private void generateAnimation( boolean isSwap, boolean isToRight, int mPosition ){
+		switch( mCurrentAction ){
+			case NONE:
+				break;
+			case DISMISS:
+				generateDismissAnimation(mParentView, isSwap, isToRight, mPosition);
+				break;
+			case REVEAL:
+				generateRevealAnimation(mFrontView, isSwap, isToRight, mPosition);
+				break;
+		}
+	}
+	
+	/**
+	 *	针对指定的view构造一个平移动画，平移偏移量通过指定参数计算
+	 * @param mView
+	 * @param isSwap
+	 * @param isToRight
+	 * @param mPosition
+	 */
+	private void generateRevealAnimation(final View mView,final boolean isSwap,final boolean isToRight,final int mPosition ){
+		float mMoveTo = 0;
+		switch( mItemState.get(mDownPosition) ){
+			case NORMAL:
+				if( isSwap ){
+					mMoveTo = isToRight ? (int)(mListWidth - mRightSwipeRemainOffset) : (int)(-mListWidth + mLeftSwipeRemainOffset);
+				}
+				break;
+			case LEFT:
+				if( isSwap ){
+					mMoveTo = (int)(-mListWidth + mLeftSwipeRemainOffset);
+				}
+				break;
+			case RIGHT:
+				if( isSwap ){
+					mMoveTo = (int)(mListWidth - mRightSwipeRemainOffset);
+				}
+				break;
+		}
+		
+		ViewPropertyAnimator.animate(mView).translationX(mMoveTo).setDuration(mSwipeAnimationTime)
+			.setListener( new AnimatorListenerAdapter() {
+
+				@Override
+				public void onAnimationEnd(Animator animation) {
+					if( isSwap ){
+						switch( mItemState.get(mDownPosition) ){
+							case NORMAL:
+								mItemState.set(mDownPosition, isToRight ? OpenState.RIGHT : OpenState.LEFT);
+								break;
+							case LEFT:
+								if( !isSwap ){
+									mItemState.set(mDownPosition, OpenState.NORMAL);
+								}
+								break;
+							case RIGHT:
+								if( !isSwap ){
+									mItemState.set(mDownPosition, OpenState.NORMAL);
+								}
+								break;
+						}
+					} else {
+						mItemState.set(mDownPosition, OpenState.NORMAL);
+					}
+					resetViews();
+				}
+				
+			} );
+	}
+	
+	/**
+	 *	针对指定的view构造一个渐隐动画，渐隐值及偏移量通过指定参数计算
+	 * @param mView
+	 * @param isSwap
+	 * @param isToRight
+	 * @param mPosition
+	 */
+	private void generateDismissAnimation( View mView, boolean isSwap, boolean isToRight, int mPosition ){
 		
 	}
 	
