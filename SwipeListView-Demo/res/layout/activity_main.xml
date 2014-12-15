@@ -1,8 +1,21 @@
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/container"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context="com.example.swipelistview_demo.MainActivity"
-    tools:ignore="MergeRootFrame" />
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/container"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent" >
+	<com.cqu.swipelistview.SwipeListView
+		xmlns:swipe="http://schemas.android.com/apk/res-auto"
+		android:id="@+id/activity_main_list"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		swipe:swipeMode="both"
+		swipe:swipeActionLeft="reveal"
+		swipe:swipeActionRight="reveal"
+		swipe:swipeOpenOnLongPress="true"
+		swipe:swipeAnimationTime="200"
+		swipe:swipeLeftRemainOffset="0dp"
+		swipe:swipeRightRemainOffset="0dp"
+		swipe:swipeCloseAllItemsWhenMove="true"
+		swipe:swipeFrontView="@+id/item_main_listview_front"
+		swipe:swipeBackView="@+id/item_main_listview_back" />
+</RelativeLayout>
 

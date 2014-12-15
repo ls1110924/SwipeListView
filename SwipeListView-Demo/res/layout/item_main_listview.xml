@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="wrap_content"
+	android:layout_height="wrap_content" >
+	<RelativeLayout
+		android:id="@+id/item_main_listview_back"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="@drawable/background_item" >
+		<Button
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="测试"
+			android:textColor="@android:color/black"
+			android:textSize="16sp"
+			android:layout_centerVertical="true"
+			android:layout_marginTop="5dp"
+			android:layout_marginBottom="5dp"
+			android:padding="3dp"
+			android:layout_alignParentRight="true" />
+	</RelativeLayout>
+	
+	<RelativeLayout
+		android:id="@+id/item_main_listview_front"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:background="#ffffff" >
+		<TextView
+			android:id="@+id/item_main_listview_content"
+			android:layout_width="match_parent"
+			android:layout_height="match_parent"
+			android:text="A Shuai"
+			android:textColor="@android:color/black"
+			android:textSize="16sp"
+			android:paddingTop="3dp"
+			android:paddingBottom="3dp"
+			android:paddingLeft="10dp"
+			android:gravity="center_vertical" />
+	</RelativeLayout>
+
+</FrameLayout>
