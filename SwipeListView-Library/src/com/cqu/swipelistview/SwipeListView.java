@@ -1,8 +1,5 @@
 package com.cqu.swipelistview;
 
-import static com.nineoldandroids.view.ViewHelper.setAlpha;
-import static com.nineoldandroids.view.ViewHelper.setTranslationX;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +14,6 @@ import android.database.DataSetObserver;
 import android.support.v4.view.MotionEventCompat;
 import android.support.v4.view.ViewConfigurationCompat;
 import android.util.AttributeSet;
-import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -105,6 +101,8 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 	
 	//标记触发事件的item view位置索引
 	private int mDownPosition;
+	
+	private boolean isSwing;
 	
 	//ListView的宽度
 	private int mListWidth;
@@ -231,6 +229,8 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 					mVelocityTracker.clear();
 					mVelocityTracker.addMovement(ev);
 				}
+				isSwing = false;
+				
 				break;
 			}
 			case MotionEvent.ACTION_MOVE:{
@@ -297,6 +297,7 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 					mVelocityTracker.clear();
 					mVelocityTracker.addMovement(ev);
 				}
+				isSwing = false;
 				
 				super.onTouchEvent(ev);
 				//务必保证返回true
@@ -318,32 +319,34 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 						case NORMAL:
 							if( mSwipeMode == SwipeMode.LEFT && mDeltaX > 0 ){
 								mDeltaX = 0;
-								mStartX = ev.getX();
-								mStartY = ev.getY();
+								mActionX = ev.getX();
+								mActionY = ev.getY();
 							}
 							if( mSwipeMode == SwipeMode.RIGHT && mDeltaX < 0 ){
 								mDeltaX = 0;
-								mStartX = ev.getX();
-								mStartY = ev.getY();
+								mActionX = ev.getX();
+								mActionY = ev.getY();
 							}
 							break;
 						case LEFT:
 							if( mDeltaX < 0 ){
 								mDeltaX = 0;
-								mStartX = ev.getX();
-								mStartY = ev.getY();
+								mActionX = ev.getX();
+								mActionY = ev.getY();
 							}
 							break;
 						case RIGHT:
 							if( mDeltaX > 0 ){
 								mDeltaX = 0;
-								mStartX = ev.getX();
-								mStartY = ev.getY();
+								mActionX = ev.getX();
+								mActionY = ev.getY();
 							}
 							break;
 					}
 					
 					if( mVelocityX > mVelocityY && mDeltaX != 0 && checkTriggeActionEvent(ev.getX(), ev.getY(), mTouchSlop, ev) ){
+						isSwing = true;
+						mScrollState = ScrollState.SCROLLING_X;
 						switch( mItemState.get(mDownPosition) ){
 							case NORMAL:
 								mCurrentAction = mDeltaX > 0 ? mRightSwipeAction : mLeftSwipeAction;
@@ -373,16 +376,79 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 					break;
 				}
 			}
-			case MotionEvent.ACTION_CANCEL:
 			case MotionEvent.ACTION_UP:{
-				if( mDownPosition == INVALID_POSITION ){
+				if( mDownPosition == INVALID_POSITION || !isSwing || mScrollState != ScrollState.SCROLLING_X ){
+					break;
+				}
+				final int pointerIndex = MotionEventCompat.getActionIndex(ev);
+				final int pointerId = MotionEventCompat.getPointerId(ev, pointerIndex);
+
+				if(pointerId != mActivePointerId){
 					break;
 				}
 				
+				float mXOffset = ev.getX() - mActionX;
 				mVelocityTracker.addMovement(ev);
 				mVelocityTracker.computeCurrentVelocity(1000);
+				float mVelocityX = mVelocityTracker.getXVelocity();
+				float mVelocityXAbs = Math.abs( mVelocityX );
+				float mVelocityY = mVelocityTracker.getYVelocity();
+				float mVelocityYAbs = Math.abs( mVelocityY );
+				switch( mItemState.get(mDownPosition) ){
+					case NORMAL:
+						if( mVelocityX > 0 && mSwipeMode == SwipeMode.LEFT ){
+							mVelocityXAbs = 0;
+							mXOffset = 0;
+						} else if (  mVelocityX < 0 && mSwipeMode == SwipeMode.RIGHT  ){
+							mVelocityXAbs = 0;
+							mXOffset = 0;
+						}
+						break;
+					case LEFT:
+						if( mVelocityX < 0 ){
+							mVelocityXAbs = 0;
+							mXOffset = 0;
+						}
+						break;
+					case RIGHT:
+						if( mVelocityX > 0 ){
+							mVelocityXAbs = 0;
+							mXOffset = 0;
+						}
+						break;
+				}
+				
+				boolean mSwap = false;
+				boolean mToRight = false;
+				if( mVelocityXAbs >= mMinFlingVelocity && mVelocityXAbs <= mMaxFlingVelocity && mVelocityXAbs > 2*mVelocityYAbs ){
+					mToRight = mVelocityX > 0;
+					switch( mItemState.get(mDownPosition) ){
+						case NORMAL:
+							mSwap = true;
+							break;
+						case LEFT:
+							mSwap = false;
+							break;
+						case RIGHT:
+							mSwap = false;
+							break;
+					}
+				} else if ( Math.abs( mXOffset ) >= mListWidth / 2 ){
+					mSwap = true;
+					mToRight = mXOffset > 0;
+				}
+				
+				generateAnimation(mSwap, mToRight, mDownPosition);
+				
+				mVelocityTracker.recycle();
+				mDownPosition = INVALID_POSITION;
+				isSwing = false;
 				
 				mScrollState = ScrollState.NONE;
+				break;
+			}
+			case MotionEvent.ACTION_CANCEL:{
+				isSwing = false;
 				break;
 			}
 		}
@@ -553,6 +619,16 @@ public class SwipeListView extends ListView implements OnScrollListener, OnClick
 			default:
 				return;
 		}
+		
+	}
+	
+	/**
+	 *	手势结束以后生成一个收尾动画
+	 * @param isSwap	是否触发了交换事件，为false的话则表明回归原位
+	 * @param isToRight	如果触发了交换事件，即需要向左或者向右
+	 * @param mPosition
+	 */
+	private void generateAnimation( boolean isSwap, boolean isToRight, int mPosition ){
 		
 	}
 	
